@@ -63,7 +63,7 @@ public class PdmTableFactory {
 	}
 
 	public static void main(String[] args) throws Exception {
-		String fileName = "֧�����.pdm";
+		String fileName = "支付网关.pdm";
 		DocumentFactory df = DocumentFactory.getInstance();
 		SAXReader reader = new SAXReader(df);
 		Document doc = reader.read(new File(fileName));
@@ -79,7 +79,7 @@ public class PdmTableFactory {
 				//System.out.println(table);
 				tables.add(table);
 				List<Node> columnsList = tableElement.selectNodes("./c:Columns/o:Column");
-				List<Element> keyList = tableElement.selectNodes("./o:Key");
+				List<Element> keyList = tableElement.selectNodes("./c:Keys/o:Key/c:Key.Columns/o:Column");
 				Set<String> keySet = new HashSet<String>();
 				for (Element keyElement : keyList) {
 					keySet.add(keyElement.attributeValue("Ref"));
@@ -87,7 +87,7 @@ public class PdmTableFactory {
 				for (Node columnNode : columnsList) {
 					if (columnNode instanceof Element) {
 						Element columnElement = (Element) columnNode;
-						String id = columnElement.attributeValue("id");
+						String id = columnElement.attributeValue("Id");
 						int sqlType = 0;
 						int decimalDigits = 0;
 						int size = 0;
@@ -168,8 +168,83 @@ public class PdmTableFactory {
 	}
 
 	public List getAllTables() throws Exception {
-		Connection conn = getConnection();
-		return getAllTables(conn);
+		String fileName = "支付网关.pdm";
+		DocumentFactory df = DocumentFactory.getInstance();
+		SAXReader reader = new SAXReader(df);
+		Document doc = reader.read(new File(fileName));
+		List<Table> tables = new ArrayList<Table>();
+		List<Node> nodeList = doc.selectNodes("//c:Tables/o:Table");
+		//System.out.println(nodeList);
+
+		for (Node tableElement : nodeList) {
+			if (tableElement instanceof Element) {
+				Node codeNode = tableElement.selectSingleNode("./a:Code");
+				Table table = new Table();
+				table.setSqlName(codeNode.getStringValue());
+				//System.out.println(table);
+				tables.add(table);
+				List<Node> columnsList = tableElement.selectNodes("./c:Columns/o:Column");
+				List<Element> keyList = tableElement.selectNodes("./c:Keys/o:Key/c:Key.Columns/o:Column");
+				Set<String> keySet = new HashSet<String>();
+				for (Element keyElement : keyList) {
+					keySet.add(keyElement.attributeValue("Ref"));
+				}
+				for (Node columnNode : columnsList) {
+					if (columnNode instanceof Element) {
+						Element columnElement = (Element) columnNode;
+						String id = columnElement.attributeValue("Id");
+						int sqlType = 0;
+						int decimalDigits = 0;
+						int size = 0;
+						boolean isPk = false;
+						boolean isNullable = false;
+						boolean isIndexed = false;
+						boolean isUnique = false;
+						String defaultValue = "";
+						String remarks = "";
+
+						Node sqlTypeNameNode = columnElement.selectSingleNode("./a:DataType");
+						Node lengthNode = columnElement.selectSingleNode("./a:Length");
+						Node precisionNode = columnElement.selectSingleNode("./a:Precision");
+						Node sqlCodeNode = columnElement.selectSingleNode("./a:Code");
+						Node nullableNode = columnElement.selectSingleNode("./a:Mandatory");
+						Node remarkNode = columnElement.selectSingleNode("./a:Comment");
+						Node defaultValueNode = columnElement.selectSingleNode("./a:DefaultValue");
+
+						String sqlTypeName = sqlTypeNameNode.getStringValue();
+						sqlType = JdbcTypeUtils.nameToSqlType(sqlTypeName);
+						String sqlName = sqlCodeNode.getStringValue();
+						if(keySet.contains(id)){
+							isPk = true;
+						}
+						if (lengthNode != null) {
+							size = Integer.parseInt(lengthNode.getStringValue());
+						}
+						if (nullableNode != null && "1".equals(nullableNode.getStringValue())) {
+							isNullable = true;
+						}
+						if (remarkNode != null) {
+							remarks = remarkNode.getStringValue();
+						}
+						if (precisionNode != null) {
+							decimalDigits = Integer.parseInt(precisionNode.getStringValue());
+						}
+						if (defaultValueNode != null) {
+							defaultValue = defaultValueNode.getStringValue();
+						}
+
+						Column column = new Column(table, sqlType, sqlTypeName, sqlName, size,
+								decimalDigits, isPk, isNullable, isIndexed, isUnique, defaultValue,
+								remarks);
+						BeanHelper.copyProperties(column,
+								TableOverrideValuesProvider.getColumnOverrideValues(table, column));
+						table.addColumn(column);
+					}
+				}
+			}
+		}
+		System.out.println(tables);
+		return tables;
 	}
 
 	public Table getTable(String tableName) throws Exception {
